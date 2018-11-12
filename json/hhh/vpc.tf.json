@@ -1,0 +1,174 @@
+{    "terraform": {
+    "provider": {
+      "aws": {
+        "access_key" : {},
+  "secret_key" : {},
+          "region": "us-east-1"
+      }
+    }
+    },
+    "resource": {
+            "aws_s3_bucket": {
+                "TfBucket": {
+                    "bucket": "terraform-state-prodd",
+                    "acl": "private",
+                    "versioning": {
+                        "enabled": "true"
+                    },
+                    "tags": {
+                        "Name": "Tfstate bucket",
+                        "Environment": "PROD"
+                    }
+                }
+            }
+        },
+    "variable" :{"aws_region" :{
+      "default" : "us-east-1"
+    }
+    },
+    "variable" :{
+  "vpc_cidr" :{
+      "default" : "10.20.0.0/16"
+    }
+    },
+     "variable" :{"subnets_cidr1":{
+      "type" : "list",
+      "default" : ["10.20.1.0/24","10.20.2.0/24","10.20.3.0/24","10.20.4.0/24","10.20.5.0/24","10.20.6.0/24"]
+    }
+    },
+    "variable" :{"subnets_cidr2":{
+     "type" : "list",
+     "default" : ["10.20.7.0/24","10.20.8.0/24","10.20.9.0/24","10.20.10.0/24","10.20.11.0/24","10.20.12.0/24"]
+   }
+   },
+    "variable":{ "azs" :{
+  "default" : ["us-east-1a","us-east-1b","us-east-1c","us-east-1d","us-east-1e","us-east-1f"]
+}
+      },
+  "resource" :{ "aws_vpc":{ "IMP": {
+    "enable_dns_support": "true",
+   "enable_dns_hostnames": "true",
+  "cidr_block"  :"${var.vpc_cidr}",
+  "tags" : {"Name" : "us-east-1_10.20.0.0/24_IMP"}
+}
+}
+},
+"resource" :{ "aws_internet_gateway" :{ "IMP_IG" :{
+  "vpc_id" : "${aws_vpc.IMP.id}",
+  "tags" : {"Name" : "us-east-1_10.20.0.0/24_IMP_IG"}
+}
+}
+},
+"resource" :{"aws_eip"  : {  "EIP" : {
+"vpc" : "true",
+     "tags" : {"Name" : "us-east-1_10.20.0.0/24_EIP"}
+         }
+       }
+      },
+      "resource" :{"aws_nat_gateway" : { "NAT" : {
+                "allocation_id" : "${aws_eip.EIP.id}",
+                "subnet_id" : "${aws_subnet.Private.0.id}",
+                "depends_on" : ["aws_internet_gateway.IMP_IG"],
+                "tags" : {"Name" : "us-east-1_10.20.0.0/24_NAT"}
+              }
+            }
+          },
+          "resource" :{ "aws_subnet" :{ "Private" :{
+        "count" : "${length(var.subnets_cidr2)}",
+        "vpc_id" : "${aws_vpc.IMP.id}",
+        "cidr_block" :  "${element(var.subnets_cidr2,count.index )}",
+        "availability_zone" : "${element(var.azs,count.index )}",
+        "tags" : {"Name" : "PriSubnet-${count.index +1}"}
+      }
+      }
+      },
+          "resource" :{ "aws_subnet" :{ "Public" :{
+        "count" : "${length(var.subnets_cidr1)}",
+        "vpc_id" : "${aws_vpc.IMP.id}",
+        "cidr_block" :  "${element(var.subnets_cidr1,count.index )}",
+        "availability_zone" : "${element(var.azs,count.index )}",
+        "tags" : {"Name" : "PubSubnet-${count.index +1}"}
+      }
+      }
+      },
+      "resource" :{"aws_route_table" : { "Public_rt" : {
+        "vpc_id" : "${aws_vpc.IMP.id}",
+         "route" : {
+              "cidr_block" : "0.0.0.0/0",
+              "gateway_id" : "${aws_internet_gateway.IMP_IG.id}"},
+            "tags" : {"Name" : "us-east-1_10.20.0.0/24_PublicRT"}
+          }
+        }
+        },
+        "resource" :{ "aws_route_table" :{ "Private_rt":{
+          "vpc_id" : "${aws_vpc.IMP.id}",
+        "route" :{
+          "cidr_block" : "0.0.0.0/0",
+          "gateway_id" : "${aws_nat_gateway.NAT.id}"},
+        "tags" : {"Name" : "us-east-1_10.20.0.0/24_PrivateRT"}
+        }
+        }
+        },
+        "resource" :{"aws_main_route_table_association" : {
+            "MainRtAs" : {
+              "vpc_id" : "${aws_vpc.IMP.id}",
+              "route_table_id" : "${aws_route_table.Default.id}"
+            }
+          }
+            },
+        "resource" : { "aws_route_table_association" :{"PubRtAs" :{
+          "count" : "${length(var.subnets_cidr1)}",
+          "subnet_id" : "${element(aws_subnet.Public.*.id, count.index)}",
+          "route_table_id" : "${aws_route_table.Public_rt.id}"
+        }
+      }
+        },
+        "resource" : { "aws_route_table_association" :{"PriRtAs" :{
+        "count" : "${length(var.subnets_cidr2)}",
+        "subnet_id" : "${element(aws_subnet.Private.*.id, count.index)}",
+        "route_table_id" : "${aws_route_table.Private_rt.id}"
+        }
+        }
+      },
+    "resource" : {  "aws_security_group" : { "IMPsec" : {
+            "vpc_id" : "${aws_vpc.IMP.id}",
+            "tags" : {
+            "Name" : "Pri_Sec"}
+       }
+      },
+      "aws_security_group_rule" :{ "SshIMP" : {
+            "type" : "ingress",
+            "from_port" : "22",
+            "to_port" : "22",
+            "protocol" : "tcp",
+            "cidr_blocks" : ["122.160.234.0/32"],
+            "security_group_id" : "${aws_security_group.IMPsec.id}"},
+       "SshMe" : {"type" : "ingress",
+                    "from_port" : "22",
+                    "to_port" : "22",
+                    "protocol" :  "tcp",
+                    "self" : "true",
+                    "security_group_id" : "${aws_security_group.IMPsec.id}"},
+      "All" : {"type" : "egress",
+                    "from_port" : "0",
+                    "to_port" : "0",
+                    "protocol" : "-1",
+                    "cidr_blocks" : ["0.0.0.0/0"],
+                    "security_group_id" : "${aws_security_group.IMPsec.id}"}
+              }
+            },
+"output" : {
+    "vpc_ID" :{"value" : "${aws_vpc.IMP.id}"},
+   "VPC-CIDR" : {"value" : "${aws_vpc.IMP.cidr_block}"},
+   "Pri-SecGrp-ID" : {"value" : "${aws_security_group.IMPsec.id}"},
+   "Pub-SecGrp-ID" : {"value" : "${aws_security_group.Pub_sec.id}"},
+   "1public_CIDR" : {"value" : "${(aws_subnet.Public.*.cidr_block)}"},
+  "1public_SubnetID" : {"value" : "${(aws_subnet.Public.*.id)}"},
+  "WEB_SubnetID" : {"value": "${aws_subnet.Public.0.id}"},
+  "1private_CIDR" : {"value" : "${(aws_subnet.Private.*.cidr_block)}"},
+   "1private_SubnetID" : {"value" : "${(aws_subnet.Private.*.id)}"},
+   "Public IP": {   "value": "${aws_instance.WEB.public_ip}"  },
+   "Private IP": {   "value": "${aws_instance.WEB.private_ip}"  },
+   "Availability Zone": { "value": "${aws_instance.WEB.availability_zone}"}
+ }
+}

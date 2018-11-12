@@ -1,0 +1,60 @@
+{    "terraform": { "backend": { "s3": {
+                "bucket": "terraform-state-prodd",
+                "key": "ec2/terraform.tfstate",
+                "region": "us-east-1" },
+        }
+    },
+    "provider": {
+        "aws": { "region": "us-east-1" }
+    },
+    "variable": {
+      "sg":{"default": ["set-list"] },
+        "assignip": { "default": true },
+        "subnet": { "default": "set-string" },
+        "image": {  "default": "ami-0922553b7b0369273" },
+        "type": { "default":"t2.medium"
+        }
+    },
+    "resource": { "aws_instance": { "WEB": {
+                "ami": "${var.image}",
+                "count": "1",
+                "instance_type": "${var.type}",
+                "subnet_id": "${aws_subnet.Public.0.id}",
+                "key_name": "IMP",
+                "associate_public_ip_address": "${var.assignip}",
+                "security_groups": ["${aws_security_group.Pub_sec.id}"],
+                "user_data" : "${file(\"user-data.sh\")}",
+                "root_block_device": {
+                    "delete_on_termination": "true",
+                    "volume_size": "50",
+                    "volume_type": "gp2" },
+                "tags": {"Name": "WEB"}
+            }
+        }
+      },
+      "resource"  :{ "aws_security_group": { "Pub_sec" : {
+"vpc_id" : "${aws_vpc.IMP.id}",
+"tags" : { "Name" : "Pub_Sec"},
+
+"ingress" : {
+"protocol"  : "-1",
+"from_port" : 0,
+"to_port"   : 0,
+"cidr_blocks" : ["0.0.0.0/0"]},
+
+"ingress":{
+"from_port" : 22,
+"to_port"   : 22,
+"protocol"  : "tcp",
+"cidr_blocks" : ["0.0.0.0/0"]},
+
+"egress" : {
+"from_port"   : 0,
+"to_port"     : 0,
+"protocol"    : "-1",
+"cidr_blocks" : ["0.0.0.0/0"]},
+"tags": {"Name": "Pub_Sec"}
+}
+}
+}
+    }
