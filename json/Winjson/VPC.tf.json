@@ -1,0 +1,382 @@
+{"terraform" :
+    {
+   "provider" : {
+      "aws" :{
+        "access_key" : {},
+  "secret_key" : {},
+           "region": "us-east-1"
+         }
+       }
+    },
+  "data" :{
+ "aws_availability_zones" :  {
+    "azs" : {}
+  }
+},
+  "resource" :  {
+      "aws_vpc" : { "IMP_vpc" : {
+   "cidr_block" : "10.20.0.0/16",
+     "tags" : {
+     "Name" : "us-east-1-10.20.0.0/16"
+    }
+  }
+},
+"aws_internet_gateway" : {
+  "IGW" : {
+  "vpc_id" : "${aws_vpc.IMP_vpc.id}",
+  "tags" : {
+      "Name" : "us-east-1_10.20.0.0/24_IGW"
+  }
+}
+},
+"aws_nat_gateway" : {
+  "NAT" : {
+    "allocation_id" : "${aws_eip.EIP.id}",
+    "subnet_id" : "${aws_subnet.us-east-1a-public.id}",
+    "depends_on" : ["aws_internet_gateway.IGW"],
+    "tags" : {
+        "Name" : "us-east-1_10.20.0.0/24_NAT"
+    }
+  }
+},
+
+"aws_subnet" : {
+    "us-east-1a-public" :{
+    "vpc_id" : "${aws_vpc.IMP_vpc.id}",
+    "cidr_block" : "10.20.1.0/24",
+    "availability_zone" : "${data.aws_availability_zones.azs.names[0]}",
+
+    "tags": {
+        "Name" : "us-east-1a_10.20.1.0/24_Pub"
+    }
+},
+
+     "us-east-1b-public" : {
+    "vpc_id" : "${aws_vpc.IMP_vpc.id}",
+    "cidr_block" : "10.20.2.0/24",
+    "availability_zone" : "${data.aws_availability_zones.azs.names[1]}",
+
+    "tags" : {
+        "Name" : "us-east-1b_10.20.2.0/24_Pub"
+    }
+},
+
+ "us-east-1c-public" : {
+    "vpc_id": "${aws_vpc.IMP_vpc.id}",
+    "cidr_block" : "10.20.3.0/24",
+  "availability_zone" : "${data.aws_availability_zones.azs.names[2]}",
+
+    "tags" : {
+        "Name" : "us-east-1c_10.20.3.0/24_Pub"
+    }
+},
+ "us-east-1d-public" : {
+    "vpc_id" : "${aws_vpc.IMP_vpc.id}",
+    "cidr_block" : "10.20.4.0/24",
+  "availability_zone" : "${data.aws_availability_zones.azs.names[3]}",
+
+    "tags" : {
+        "Name" : "us-east-1d_10.20.4.0/24_Pub"
+    }
+},
+ "us-east-1e-public" : {
+    "vpc_id" : "${aws_vpc.IMP_vpc.id}",
+    "cidr_block" : "10.20.5.0/24",
+  "availability_zone" : "${data.aws_availability_zones.azs.names[4]}",
+
+    "tags" : {
+        "Name" : "us-east-1e_10.20.5.0/24_Pub"
+    }
+},
+ "us-east-1f-public" : {
+    "vpc_id" : "${aws_vpc.IMP_vpc.id}",
+    "cidr_block" : "10.20.6.0/24",
+  "availability_zone" : "${data.aws_availability_zones.azs.names[5]}",
+
+    "tags" : {
+        "Name" : "us-east-1f_10.20.6.0/24_Pub"
+    }
+  },
+  "us-east-1a-private" :{
+  "vpc_id" : "${aws_vpc.IMP_vpc.id}",
+  "cidr_block" : "10.20.7.0/24",
+  "availability_zone" : "${data.aws_availability_zones.azs.names[0]}",
+
+  "tags": {
+      "Name" : "us-east-1a_10.20.7.0/24_Pri"
+  }
+},
+
+   "us-east-1b-private" : {
+  "vpc_id" : "${aws_vpc.IMP_vpc.id}",
+  "cidr_block" : "10.20.8.0/24",
+  "availability_zone" : "${data.aws_availability_zones.azs.names[1]}",
+
+  "tags" : {
+      "Name" : "us-east-1b_10.20.8.0/24_Pri"
+  }
+},
+
+"us-east-1c-private" : {
+  "vpc_id": "${aws_vpc.IMP_vpc.id}",
+  "cidr_block" : "10.20.9.0/24",
+"availability_zone" : "${data.aws_availability_zones.azs.names[2]}",
+
+  "tags" : {
+      "Name" : "us-east-1c_10.20.9.0/24_Pri"
+  }
+},
+"us-east-1d-private" : {
+  "vpc_id" : "${aws_vpc.IMP_vpc.id}",
+  "cidr_block" : "10.20.10.0/24",
+"availability_zone" : "${data.aws_availability_zones.azs.names[3]}",
+
+  "tags" : {
+      "Name" : "us-east-1d_10.20.10.0/24_Pri"
+  }
+},
+"us-east-1e-private" : {
+  "vpc_id" : "${aws_vpc.IMP_vpc.id}",
+  "cidr_block" : "10.20.11.0/24",
+"availability_zone" : "${data.aws_availability_zones.azs.names[4]}",
+
+  "tags" : {
+      "Name" : "us-east-1e_10.20.11.0/24_Pri"
+  }
+},
+"us-east-1f-private" : {
+  "vpc_id" : "${aws_vpc.IMP_vpc.id}",
+  "cidr_block" : "10.20.12.0/24",
+"availability_zone" : "${data.aws_availability_zones.azs.names[5]}",
+
+  "tags" : {
+      "Name" : "us-east-1f_10.20.12.0/24_Pri"
+  }
+}
+},
+
+"aws_eip"  : {
+  "EIP" : {
+"vpc" : "true",
+     "tags" : {
+      "Name" : "us-east-1a_10.20.1.0/24_EIP"
+             }
+         }
+      },
+"aws_route_table" : { "Public_Rt" : {
+    "vpc_id" : "${aws_vpc.IMP_vpc.id}",
+   "route" : {
+        "cidr_block" : "0.0.0.0/0",
+        "gateway_id" : "${aws_internet_gateway.IGW.id}"
+      },
+      "tags" : {
+            "Name" : "us-east-1_10.20.0.0/24_PublicRT"
+      }
+  },
+ "Private_Rt" : {
+    "vpc_id" : "${aws_vpc.IMP_vpc.id}",
+   "route" : {
+        "cidr_block" : "0.0.0.0/0",
+        "gateway_id" : "${aws_nat_gateway.NAT.id}"
+      },
+      "tags" : {
+            "Name" : "us-east-1_10.20.0.0/24_PrivateRT"
+      }
+  }
+},
+
+"aws_main_route_table_association" : {
+    "PriRtAs" : {
+      "vpc_id" : "${aws_vpc.IMP_vpc.id}",
+      "route_table_id" : "${aws_route_table.Private_Rt.id}"
+    }
+    },
+"aws_route_table_association" : {
+    "PubRTA1" : {
+        "subnet_id" : "${aws_subnet.us-east-1a-public.id}",
+        "route_table_id" : "${aws_route_table.Public_Rt.id}"
+        },
+         "PubRTA2": {
+          "subnet_id" : "${aws_subnet.us-east-1b-public.id}",
+          "route_table_id" : "${aws_route_table.Public_Rt.id}"
+        },
+         "PubRTA3": {
+            "subnet_id" : "${aws_subnet.us-east-1c-public.id}",
+            "route_table_id" : "${aws_route_table.Public_Rt.id}"
+          },
+          "PubRTA4": {
+          "subnet_id" : "${aws_subnet.us-east-1d-public.id}",
+          "route_table_id" : "${aws_route_table.Public_Rt.id}"
+          },
+           "PubRTA5": {
+            "subnet_id" : "${aws_subnet.us-east-1e-public.id}",
+            "route_table_id" : "${aws_route_table.Public_Rt.id}"
+          },
+           "PubRTA6": {
+              "subnet_id" : "${aws_subnet.us-east-1f-public.id}",
+              "route_table_id" : "${aws_route_table.Public_Rt.id}"
+            },
+            "PriRTA1" : {
+              "subnet_id" : "${aws_subnet.us-east-1a-private.id}",
+              "route_table_id" : "${aws_route_table.Private_Rt.id}"
+            },
+               "PriRTA2" : {
+                "subnet_id" : "${aws_subnet.us-east-1b-private.id}",
+                "route_table_id" : "${aws_route_table.Private_Rt.id}"
+              },
+                 "PriRTA3" : {
+                  "subnet_id" : "${aws_subnet.us-east-1c-private.id}",
+                  "route_table_id" : "${aws_route_table.Private_Rt.id}"
+                },
+                "PriRTA4" : {
+                  "subnet_id" : "${aws_subnet.us-east-1d-private.id}",
+                  "route_table_id" : "${aws_route_table.Private_Rt.id}"
+                },
+                   "PriRTA5" : {
+                    "subnet_id" : "${aws_subnet.us-east-1e-private.id}",
+                    "route_table_id" : "${aws_route_table.Private_Rt.id}"
+                  },
+                     "PriRTA6" : {
+                      "subnet_id" : "${aws_subnet.us-east-1f-private.id}",
+                      "route_table_id" : "${aws_route_table.Private_Rt.id}"
+                    }
+            },
+"aws_security_group" : {
+    "IMPsec" : {
+      "vpc_id" : "${aws_vpc.IMP_vpc.id}",
+      "tags" : {
+      "Name" : "Pri_Sec"
+    }
+ }
+},
+
+"aws_security_group_rule" :{
+    "SshIMP" : {
+      "type" : "ingress",
+      "from_port" : "22",
+      "to_port" : "22",
+      "protocol" : "tcp",
+      "cidr_blocks" : ["122.160.234.0/32"],
+      "security_group_id" : "${aws_security_group.IMPsec.id}"
+      },
+
+ "SshMe" : {
+              "type" : "ingress",
+              "from_port" : "22",
+              "to_port" : "22",
+              "protocol" :  "tcp",
+              "self" : "true",
+              "security_group_id" : "${aws_security_group.IMPsec.id}"
+          },
+"All" : {
+              "type" : "egress",
+              "from_port" : "0",
+              "to_port" : "0",
+              "protocol" : "-1",
+              "cidr_blocks" : ["0.0.0.0/0"],
+              "security_group_id" : "${aws_security_group.IMPsec.id}"
+          }
+        }
+      },
+"output" : {
+        "DB_Inst_ID" :{
+           "value" : "${aws_db_instance.IMP-RDS-01-01.id}"
+    },
+    "ALB_ID" :{
+       "value" : "${aws_alb.IMP-ALB.id}"
+},
+            "vpc_ID" :{
+               "value" : "${aws_vpc.IMP_vpc.id}"
+        },
+             "VPC-CIDR" : {
+               "value" : "${aws_vpc.IMP_vpc.cidr_block}"
+      },
+             "Pri-SecGrp-ID" : {
+              "value" : "${aws_security_group.IMPsec.id}"
+            },
+        
+               "1public_CIDR" : {
+                    "value" : "${aws_subnet.us-east-1a-public.cidr_block}"
+                },
+                "1public_SubnetID" : {
+                  "value" : "${aws_subnet.us-east-1a-public.id}"
+                },
+              "2public_CIDR" : {
+                    "value" : "${aws_subnet.us-east-1b-public.cidr_block}"
+                },
+                "2public_SubnetID" : {
+                    "value" : "${aws_subnet.us-east-1b-public.id}"
+                },
+                "3public_CIDR" : {
+                    "value" : "${aws_subnet.us-east-1c-public.cidr_block}"
+                },
+                "3public_SubnetID" : {
+                    "value" : "${aws_subnet.us-east-1c-public.id}"
+                },
+                "4public_CIDR" : {
+                    "value" : "${aws_subnet.us-east-1d-public.cidr_block}"
+                },
+                "4public_SubnetID" : {
+                    "value" : "${aws_subnet.us-east-1d-public.id}"
+                },
+                "5public_CIDR" : {
+                    "value" : "${aws_subnet.us-east-1e-public.cidr_block}"
+                },
+                "5public_SubnetID" : {
+                    "value" : "${aws_subnet.us-east-1e-public.id}"
+                },
+                "6public_CIDR" : {
+                    "value" : "${aws_subnet.us-east-1f-public.cidr_block}"
+                },
+                "6public_SubnetID" : {
+                    "value" : "${aws_subnet.us-east-1f-public.id}"
+                },
+                "1private_CIDR" : {
+                     "value" : "${aws_subnet.us-east-1a-private.cidr_block}"
+                 },
+                 "1private_SubnetID" : {
+                   "value" : "${aws_subnet.us-east-1a-private.id}"
+                 },
+               "2private_CIDR" : {
+                     "value" : "${aws_subnet.us-east-1b-private.cidr_block}"
+                 },
+                 "2private_SubnetID" : {
+                     "value" : "${aws_subnet.us-east-1b-private.id}"
+                 },
+                 "3private_CIDR" : {
+                     "value" : "${aws_subnet.us-east-1c-private.cidr_block}"
+                 },
+                 "3private_SubnetID" : {
+                     "value" : "${aws_subnet.us-east-1c-private.id}"
+                 },
+                 "4private_CIDR" : {
+                     "value" : "${aws_subnet.us-east-1d-private.cidr_block}"
+                 },
+                 "4private_SubnetID" : {
+                     "value" : "${aws_subnet.us-east-1d-private.id}"
+                 },
+                 "5private_CIDR" : {
+                     "value" : "${aws_subnet.us-east-1e-private.cidr_block}"
+                 },
+                 "5private_SubnetID" : {
+                     "value" : "${aws_subnet.us-east-1e-private.id}"
+                 },
+                 "6private_CIDR" : {
+                     "value" : "${aws_subnet.us-east-1f-private.cidr_block}"
+                 },
+                 "6private_SubnetID" : {
+                     "value" : "${aws_subnet.us-east-1f-private.id}"
+                 },
+              "Instance_Password":{
+"value" : "${rsadecrypt(aws_instance.PubInst.password_data,file(\"IMP.pem\"))}"
+},
+"Public IP": {
+            "value": "${aws_instance.PubInst.public_ip}"
+        },
+        "Private IP": {
+            "value": "${aws_instance.PubInst.private_ip}"
+        },
+        "Availability Zone": {
+            "value": "${aws_instance.PubInst.availability_zone}"
+        }
+}

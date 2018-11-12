@@ -1,0 +1,90 @@
+{ "terraform" :
+  {
+    "provider": {
+        "aws": {
+            "region": "us-east-1"
+        }
+      }
+    },
+    "resource" :{ "aws_security_group" :{ "IMP-ALB-SEC": {
+        "name" : "IMP-ALB",
+        "description" : "allow HTTPS/HTTP to ALB",
+        "vpc_id" : "${aws_vpc.IMP_vpc.id}",
+        "ingress" : {
+            "from_port" : "80",
+            "to_port" : "80",
+            "protocol" : "HTTP",
+            "cidr_blocks" : ["0.0.0.0/0"]
+                },
+                "egress" : {
+                  "from_port"   : 0,
+                  "to_port"     : 0,
+                  "protocol"    : "-1",
+                  "cidr_blocks" : ["0.0.0.0/0"]
+                },
+        "tags" : {
+            "Name" : "IMP-ALB-SEC"
+        }
+      }
+    }
+    },
+"resource" :{ "aws_alb" :{"IMP-ALB": {
+  "name"            : "IMP-ALB",
+  "internal"        : false,
+  "idle_timeout"    : "300",
+ "load_balancer_type": "application",
+  "security_groups" : ["${aws_security_group.IMP-ALB-SEC.id}"],
+  "subnets" : ["${aws_subnet.us-east-1a-public.id}""${aws_subnet.us-east-1b-public.id}" "${aws_subnet.us-east-1c-public.id}"
+  "${aws_subnet.us-east-1d-public.id}""${aws_subnet.us-east-1e-public.id}""${aws_subnet.us-east-1f-public.id}"],
+  "enable_deletion_protection" : false,
+  "tags" : {
+    "Name" : "IMP-ALB"
+  }
+}
+}
+},
+
+"resource" :{ "aws_alb_target_group" :{"ALB-GRP" :{
+  "name"     : "ALB-GRP",
+  "port"     : "80",
+  "protocol" : "HTTP",
+  "vpc_id"   : "${aws_vpc.IMP_vpc.id}",
+  "health_check": {
+                          "port": "80",
+                          "protocol": "HTTP"
+                  },
+                  "tags" : {
+    "Name" : "ALB-GRP"
+  }
+}
+}
+},
+
+"resource" :{"aws_alb_target_group_attachment" :{"IMP-ALB-GRP-ATT": {
+  "target_group_arn" : "${aws_alb_target_group.ALB-GRP.arn}",
+  "target_id"        : "${aws_instance.PubInst.id}",
+  "port"             : "80"
+}
+}
+},
+"resource" :{ "aws_alb_listener":{
+           "ALBlistener":{
+               "load_balancer_arn": "${aws_alb.IMP-ALB.arn}",
+               "port": "443",
+               "protocol":"HTTPS",
+               "certificate_arn": "arn:aws:acm:us-east-1:755382930802:certificate/893b49bb-22af-47ab-93a0-2dea492816c2",
+               "default_action": {
+                   "target_group_arn": "${aws_alb_target_group.ALB-GRP.arn}",
+                   "type": "forward"
+               }
+             }
+           }
+       },
+ "resource" :{"aws_alb_listener_certificate": {
+           "LisCer": {
+               "listener_arn": "${aws_alb_listener.ALBlistener.arn}",
+               "certificate_arn": "arn:aws:acm:us-east-1:755382930802:certificate/893b49bb-22af-47ab-93a0-2dea492816c2"
+           }
+       }
+}
+}

@@ -1,0 +1,69 @@
+{ "terraform" :{
+    "provider": {
+        "aws": {
+            "region": "us-east-1"
+        }
+      }
+    },
+    "resource"  :{ "aws_security_group": {
+     "Rds_Sec" : {
+  "vpc_id" : "${aws_vpc.IMP_vpc.id}",
+  "tags": {
+  "Name": "IMP-RDS_sec"
+},
+ "ingress":{
+  "from_port" : 0,
+  "to_port"   : 0,
+  "protocol"    : "-1",
+  "cidr_blocks" : ["0.0.0.0/0"]
+  },
+"ingress":{
+    "from_port" : 3306,
+    "to_port"   : 3306,
+    "protocol"  : "tcp",
+
+  },
+ "egress":{
+  "from_port"   : 0,
+  "to_port"     : 0,
+  "protocol"    : "-1",
+  "cidr_blocks" : ["0.0.0.0/0"]
+  }
+}
+}
+},
+
+"resource" :{ "aws_db_instance" :{"IMP-RDS-01-01" :{
+  "depends_on"             : ["aws_security_group.Rds_Sec"],
+  "identifier"             : "mysqlrds",
+  "allocated_storage"      : "50",
+  "engine"                 : "MySQL",
+  "engine_version"         :  "8.0.11",
+    "instance_class"       : "db.t2.medium",
+  "name"                   : "mydb",
+  "username"               : "myuser",
+  "password"               : "mypassword",
+  "vpc_security_group_ids" : ["${aws_security_group.Rds_Sec.id}","${aws_security_group.Pub_sec.id}"],
+  "final_snapshot_identifier" : "whatever",
+  "skip_final_snapshot"        : true,
+  "db_subnet_group_name"   : "${aws_db_subnet_group.IMP-RDS-Subnet-Grp.id}",
+  "parameter_group_name"   : "default.mysql8.0",
+  "tags": {
+  "Name": "IMP-RDS-01-01"
+ }
+}
+}
+},
+
+"resource":{ "aws_db_subnet_group":{ "IMP-RDS-Subnet-Grp": {
+  "name"        : "main_subnet_group",
+  "description" : "Main group of Subnets",
+  "subnet_ids"  : ["${aws_subnet.us-east-1a-private.*.id}","${aws_subnet.us-east-1b-private.*.id}" ,"${aws_subnet.us-east-1c-private.*.id}",
+  "${aws_subnet.us-east-1d-private.*.id}","${aws_subnet.us-east-1e-private.*.id}","${aws_subnet.us-east-1f-private.*.id}"],
+  "tags": {
+  "Name": "IMP-RDS-Subnet-Grp"
+ }
+}
+}
+}
+}

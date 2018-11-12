@@ -1,0 +1,80 @@
+{ "terraform" :
+  {
+    "provider": {
+        "aws": {
+            "region": "us-east-1",
+                }
+      }
+    },
+    "resource": {
+    "aws_s3_bucket": {
+        "contentbucket123": {
+            "bucket": "imp-cf-s3",
+            "acl": "private",
+            "tags": {
+                "Name": "IMP-CF-S3 bucket",
+                "Environment": "PROD"
+            }
+        }
+          },
+          "aws_s3_bucket_object":{
+              "contentbucket123_object":{
+                "key": "someobject",
+                "bucket": "${aws_s3_bucket.contentbucket123.bucket}",
+                "source": "./download.jpg",
+                "depends_on":["aws_s3_bucket.contentbucket123"]
+              }
+            },
+    "aws_s3_bucket_policy": {
+        "get-object": {
+            "bucket": "${aws_s3_bucket.contentbucket123.id}",
+            "policy": "{\n \"Version\": \"2012-10-17\",\n \"Statement\": [\n {\n \"Sid\": \"\",\n \"Action\": [\n \"s3:GetObject\"\n ],\n \"Effect\": \"Allow\",\n \"Resource\": \"arn:aws:s3:::${aws_s3_bucket.contentbucket123.id}/*\",\n \"Principal\": \"*\"\n }\n ]\n }\n"
+        }
+    }
+},
+
+"resource": {
+        "aws_cloudfront_distribution": {
+            "IMP-CF": {
+                "origin": {
+                    "domain_name": "${aws_s3_bucket.contentbucket123.bucket_domain_name}",
+                    "origin_id": "IMP-Origin"
+                },
+                "default_cache_behavior": {
+                    "allowed_methods": ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
+                    "cached_methods": ["GET", "HEAD"],
+                    "forwarded_values": {
+                        "cookies": {
+                            "forward": "none"
+                        },
+                        "query_string": false
+                    },
+                    "target_origin_id": "IMP-Origin",
+                    "viewer_protocol_policy": "redirect-to-https",
+                    "min_ttl": 0,
+                    "default_ttl": 3600,
+                    "max_ttl": 86400,
+                    "smooth_streaming": false,
+                    "compress": false
+                },
+                "enabled": true,
+                "viewer_certificate": {
+                    "acm_certificate_arn": "arn:aws:acm:us-east-1:755382930802:certificate/893b49bb-22af-47ab-93a0-2dea492816c2",
+                    "ssl_support_method": "sni-only",
+                    "minimum_protocol_version": "TLSv1.2_2018"
+                },
+                "tags": {
+                    "Environment": "IMP-CF"
+                },
+
+                "is_ipv6_enabled": true,
+                "restrictions": {
+                    "geo_restriction": {
+                        "restriction_type": "none"
+                    }
+                },
+                "depends_on":["aws_s3_bucket.contentbucket123"]
+            }
+        }
+    }
+}
