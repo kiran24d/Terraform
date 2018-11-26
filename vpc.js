@@ -1,7 +1,6 @@
 let aws = {};
 let EC2 = {};
 let ec2 = {};
-let AWS = {};
 let reg = "us-east-1";
 let subnetazs = ["us-east-1a","us-east-1b","us-east-1c","us-east-1d","us-east-1e","us-east-1f","us-east-1a","us-east-1b","us-east-1c","us-east-1d","us-east-1e","us-east-1f"];
 let cb = "10.20.0.0"; 
@@ -55,8 +54,9 @@ let subnet = r.aws_subnet;
             }
             subnet[s] = {
             vpc_id : 'IMP_Vpc',
-            cidr_block : `10.20.${s+1}.0/24,
-            availability_zone : subnetazs[s]  };
+            cidr_block : `10.20.${s+1}.0/24`,
+            availability_zone : subnetazs[s]
+            };  
         subnet[s].tags = { Name : `${subnet_type}-${subnetazs[s]}`};
             };
     for (let n = 6, subnet_type = "Private"; n < azs.length; n++) {
@@ -64,7 +64,7 @@ let subnet = r.aws_subnet;
                     subnet_type = "Private"; }
                     subnet[n] = {
                     vpc_id : 'IMP_Vpc',
-                    cidr_block : `10.20.${s+1}.0/24,
+                    cidr_block : `10.20.${n+1}.0/24`,
                     availability_zone : subnetazs[n]
                 };
                 subnet[n].tags = {
