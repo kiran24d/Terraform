@@ -28,8 +28,17 @@ vpc.IMP_Vpc = {
     enable_dns_hostnames : true }
 vpc.IMP_Vpc.tags = { Name : 'Imp_Vpc'};
 
+let SG = r.aws_default_security_group = {};
+SG.default = { vpc_id : '${aws_vpc.IMP_Vpc.id}',
+ingress :{
+    protocol  : -1,
+    self      : true,
+    from_port : 0,
+    to_port   : 0
+  }
+};
 let IG = r.aws_internet_gateway = {};
-IG.Igw_Imp = { vpc_id : 'IMP_Vpc' }
+IG.Igw_Imp = { vpc_id : '${aws_vpc.IMP_Vpc.id}' }
   IG.Igw_Imp.tags = { Name : "us-east-1_10.20.0.0/24_IMP_IG" };
 
 r.aws_instance = {};
@@ -38,7 +47,7 @@ let instance = r.aws_instance = {};
 instance.Web = {
     ami : "ami-0922553b7b0369273",
     count : "1",instance_type : "t2.medium",
-    subnet_id : "0",
+    subnet_id : '${aws_subnet.0.id}',
     key_name : "IMP",
     associate_public_ip_address : true,
     security_groups : ["default"],
@@ -55,7 +64,7 @@ let subnet = r.aws_subnet;
         if (s >= 5 ) {subnet_type = "Public";
             }
             subnet[s] = {
-            vpc_id : 'IMP_Vpc',
+            vpc_id : '${aws_vpc.IMP_Vpc.id}',
             cidr_block : `10.20.${s+1}.0/24`,
             availability_zone : subnetazs[s]
             };  
@@ -65,7 +74,7 @@ let subnet = r.aws_subnet;
         if (n <= 11 ) {
                     subnet_type = "Private"; }
                     subnet[n] = {
-                    vpc_id : 'IMP_Vpc',
+                    vpc_id : '${aws_vpc.IMP_Vpc.id}',
                     cidr_block : `10.20.${n+1}.0/24`,
                     availability_zone : subnetazs[s]
                 };
@@ -73,7 +82,7 @@ let subnet = r.aws_subnet;
                     Name : `${subnet_type}-${subnetazs[n]}`
                 };
                     };
-    let NODE = JSON.stringify(tf, null, 2);
+    let NODE = JSON.stringify(tf, null,3);
     console.log(NODE);
     const { writeFileSync } = require('fs');
     writeFileSync('./template.tf.json', NODE);
