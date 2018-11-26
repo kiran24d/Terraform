@@ -77,12 +77,3 @@ let subnet = r.aws_subnet;
     console.log(NODE);
     const { writeFileSync } = require('fs');
     writeFileSync('./template.tf.json', NODE);
-const { exec } = require('child_process');
-exec('cd ./test; terraform init; terraform plan', (err, sout, serr) => {
-    if (error) {
-        console.error(`exec error: ${error}`);
-        return;
-      }
-      console.log(`stdout: ${stdout}`);
-      console.log(`stderr: ${stderr}`);
-    });
