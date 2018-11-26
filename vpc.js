@@ -5,8 +5,6 @@ let AWS = {};
 let reg = "us-east-1";
 let subnetazs = ["us-east-1a","us-east-1b","us-east-1c","us-east-1d","us-east-1e","us-east-1f","us-east-1a","us-east-1b","us-east-1c","us-east-1d","us-east-1e","us-east-1f"];
 let cb = "10.20.0.0"; 
-let cidrsubnets = ["10.20.1.0/24","10.20.2.0/24","10.20.3.0/24","10.20.4.0/24","10.20.5.0/24","10.20.6.0/24",
-"10.20.7.0/24","10.20.8.0/24","10.20.9.0/24","10.20.10.0/24","10.20.11.0/24","10.20.12.0/24"];
 let azs = ["us-east-1a","us-east-1b","us-east-1c","us-east-1d","us-east-1e","us-east-1f","us-east-1a","us-east-1b","us-east-1c","us-east-1d","us-east-1e","us-east-1f"];
 
 tf = {};
@@ -57,7 +55,7 @@ let subnet = r.aws_subnet;
             }
             subnet[s] = {
             vpc_id : 'IMP_Vpc',
-            cidr_block : cidrsubnets[s],
+            cidr_block : `10.20.${s+1}.0/24,
             availability_zone : subnetazs[s]  };
         subnet[s].tags = { Name : `${subnet_type}-${subnetazs[s]}`};
             };
@@ -66,7 +64,7 @@ let subnet = r.aws_subnet;
                     subnet_type = "Private"; }
                     subnet[n] = {
                     vpc_id : 'IMP_Vpc',
-                    cidr_block : cidrsubnets[n],
+                    cidr_block : `10.20.${s+1}.0/24,
                     availability_zone : subnetazs[n]
                 };
                 subnet[n].tags = {
