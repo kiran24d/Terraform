@@ -1,0 +1,479 @@
+properties([
+  parameters([
+    [$class: 'CascadeChoiceParameter',
+      choiceType: 'PT_SINGLE_SELECT',
+      description: 'Select Image',
+      filterLength: 1,
+      filterable: true,
+      name: 'ECR_image_name',
+      script: [
+        $class: 'GroovyScript',
+        script: [
+          classpath: [],
+          sandbox: false,
+          script:
+          '''import com.amazonaws.client.builder.AwsClientBuilder;
+import com.amazonaws.services.ecr.AmazonECR;
+import com.amazonaws.services.ecr.AbstractAmazonECR;
+import com.amazonaws.services.ecr.AmazonECRClient;
+import com.amazonaws.services.ecr.model.ListImagesRequest;
+import com.amazonaws.services.ecr.model.ListImagesResult;
+import com.amazonaws.services.ecr.AmazonECRClientBuilder;
+import com.amazonaws.regions.Region;
+import com.amazonaws.regions.RegionUtils;
+import com.amazonaws.regions.Regions;
+import jenkins.model.*
+
+AmazonECR client = AmazonECRClientBuilder.standard().withRegion("us-east-2").build();
+ListImagesRequest request = new ListImagesRequest().withRepositoryName("fdp-wallet-service-release");
+res = client.listImages(request);
+
+
+def result = []
+for (image in res) {
+ result.add(image.getImageIds());
+}
+
+return result[0].imageTag;
+'''
+        ]
+      ]
+    ]
+  ]),
+  buildDiscarder(logRotator(artifactDaysToKeepStr: '', artifactNumToKeepStr: '', daysToKeepStr: '', numToKeepStr: '10'))
+])
+
+pipeline {
+
+  parameters {
+    choice(
+      choices: ['fetch-prod'], //should be your own namespace
+      description: '',
+      name: 'namespace')
+    choice(
+      choices: ['prod'],
+      description: '',
+      name: 'cluster')
+    string(defaultValue: "petplan-digital/fdp-wallet-service", description: '', name: 'git_name')
+    gitParameter branchFilter: 'origin/(.*)', defaultValue: 'develop', name: 'git_branch', type: 'PT_BRANCH', listSize: '1', selectedValue: 'DEFAULT'
+    }
+
+    options {
+        copyArtifactPermission(currentBuild.projectName);
+    }
+
+  agent {
+    kubernetes {
+      label 'mypod'
+      defaultContainer 'jnlp'
+      yaml """
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    some-label: some-label-value
+  annotations:
+    sidecar.istio.io/inject: "false"
+spec:
+  containers:
+  - name: helm
+    image: dtzar/helm-kubectl:2.15.2
+    command:
+    - cat
+    tty: true
+  - name: docker
+    image: docker:latest
+    command:
+    - cat
+    tty: true
+    volumeMounts:
+    - name: dockersock
+      mountPath: /var/run/docker.sock
+  - name: debian
+    image: debian:latest
+    command:
+    - cat
+    tty: true
+  - name: openjdk
+    image: openjdk:11
+    command:
+    - cat
+    tty: true
+    volumeMounts:
+    - name: dockersock
+      mountPath: /var/run/docker.sock
+  volumes:
+  - name: dockersock
+    hostPath:
+      path: /var/run/docker.sock
+"""
+    }
+  }
+
+
+  stages {
+
+    stage ('Notification') {
+      steps{
+          slackSend color: '#BDFFC3', message: "${env.JOB_NAME} deployment number ${env.BUILD_NUMBER} Started - (<${env.BUILD_URL}|Open>)", channel: 'fetch-prod-env-cicd'
+      }
+    }
+
+    stage ('Prepare') {
+      steps {
+        sh 'echo "Cloning repo ..."'
+        checkout([$class: 'GitSCM',
+          branches: [[name: "devops"]],
+          doGenerateSubmoduleConfigurations: false,
+          extensions: [[$class: 'LocalBranch']],
+          submoduleCfg: [],
+          userRemoteConfigs: [[
+            credentialsId: 'git-fdp-prospect-pet-service',
+            url: 'git@bitbucket.org:${git_name}.git']]])
+      }
+    }
+
+    stage ('Prepare build name') {
+      steps {
+        sh '''
+          echo "${ECR_image_name}" > tag.txt
+        '''
+      }
+    }
+
+    stage('Get last deployed image') {
+      steps {
+        script {
+          container('helm') {
+            withCredentials([file(credentialsId: "kube-config-petplan-${cluster}-cluster", variable: 'KUBECONFIG')]) {
+              script {
+                sh '''
+                  kubectl get deploy prod-fdp-wallet-service -n ${namespace} -o yaml | grep image: | awk -F ":" '{ print $3 }' > last_successful_build_tag.txt
+                '''
+              }
+            }
+          }
+        }
+      }
+    }
+
+    stage('1. Prepare canary deployments with last deployed version and 0 replica') {
+      steps {
+        script {
+          container('helm') {
+            withCredentials([file(credentialsId: "kube-config-petplan-${cluster}-cluster", variable: 'KUBECONFIG')]) {
+              script {
+                sh '''
+                  lastDeployedVersion=$(cat last_successful_build_tag.txt)
+                  echo "****** Stage 1 running ******"
+                  helm upgrade  --install --namespace ${namespace} --values ./.cicd/helm-charts/fetch-prod-helm-chart/values.yaml --set productionDeployment.image=768992413438.dkr.ecr.us-east-2.amazonaws.com/fdp-wallet-service-release:$lastDeployedVersion,productionDeployment.weight=100,productionDeployment.replicaCount=2,canaryDeployment.image=768992413438.dkr.ecr.us-east-2.amazonaws.com/fdp-wallet-service-release:$lastDeployedVersion,canaryDeployment.replicaCount=0,canaryDeployment.weight=0 --wait --timeout 600 fetch-prod-fdp-wallet-service ./.cicd/helm-charts/fetch-prod-helm-chart
+                  echo "****** Stage 1 completed ******"
+                '''
+              }
+            }
+          }
+        }
+      }
+    }
+
+    stage('Pending Approval for stage 2- Prod: v1, 2 replicas, 100% traffic || Canary: v2, 2 replicas, 0% traffic') {
+      steps {
+        script {
+          env.APPROVAL = input id: 'Stage2Action', message: 'Proceed to stage 2 or Rollback?', parameters: [choice(choices: ['Proceed', 'Rollback'], description: 'Select Proceed to go to Stage 2, Rollback to go to existing state\n', name: 'APPROVAL')]
+          if(env.APPROVAL == "Rollback") {
+            sh '''
+              echo "*******Rollback to v1 from Stage 1*******"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('2. Prepare Canary deployment of new version with 2 replicas and 0% traffic') {
+      when {
+        expression {
+          env.APPROVAL == "Proceed"
+        }
+      }
+      steps {
+        script {
+          container('helm') {
+            withCredentials([file(credentialsId: "kube-config-petplan-${cluster}-cluster", variable: 'KUBECONFIG')]) {
+              script {
+                sh '''
+                  lastDeployedVersion=$(cat last_successful_build_tag.txt)
+                  echo "****** Stage 2 running ******"
+                  helm upgrade  --install --namespace ${namespace} --values ./.cicd/helm-charts/fetch-prod-helm-chart/values.yaml --set productionDeployment.image=768992413438.dkr.ecr.us-east-2.amazonaws.com/fdp-wallet-service-release:$lastDeployedVersion,productionDeployment.weight=100,productionDeployment.replicaCount=2,canaryDeployment.image=768992413438.dkr.ecr.us-east-2.amazonaws.com/fdp-wallet-service-release:${ECR_image_name},canaryDeployment.replicaCount=2,canaryDeployment.weight=0 --wait --timeout 600 fetch-prod-fdp-wallet-service ./.cicd/helm-charts/fetch-prod-helm-chart
+                  echo "****** Stage 2 completed ******"
+                '''
+              }
+            }
+          }
+        }
+      }
+    }
+
+    stage('Pending Approval for stage 3- Prod: v1, 2 replicas, 0% traffic || Canary: v2, 2 replicas, 100% traffic') {
+      when {
+        expression {
+          env.APPROVAL == "Proceed"
+        }
+      }
+      steps {
+        script {
+          env.APPROVAL = input id: 'Stage3Action', message: 'Proceed to stage 3 or Rollback?', parameters: [choice(choices: ['Proceed', 'Rollback'], description: 'Select Proceed to go to Stage 3, Rollback to go to existing state\n', name: 'APPROVAL')]
+          if(env.APPROVAL == "Rollback") {
+            sh '''
+              echo "*******Rollback to v1 from Stage 2*******"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('3. Canary deployment of new version with 2 replicas and 100% traffic') {
+      when {
+        expression {
+          env.APPROVAL == "Proceed"
+        }
+      }
+      steps {
+        script {
+          container('helm') {
+            withCredentials([file(credentialsId: "kube-config-petplan-${cluster}-cluster", variable: 'KUBECONFIG')]) {
+              script {
+                sh '''
+                  lastDeployedVersion=$(cat last_successful_build_tag.txt)
+                  echo "****** Stage 3 running ******"
+                  helm upgrade  --install --namespace ${namespace} --values ./.cicd/helm-charts/fetch-prod-helm-chart/values.yaml --set productionDeployment.image=768992413438.dkr.ecr.us-east-2.amazonaws.com/fdp-wallet-service-release:$lastDeployedVersion,productionDeployment.weight=0,productionDeployment.replicaCount=2,canaryDeployment.image=768992413438.dkr.ecr.us-east-2.amazonaws.com/fdp-wallet-service-release:${ECR_image_name},canaryDeployment.replicaCount=2,canaryDeployment.weight=100 --wait fetch-prod-fdp-wallet-service ./.cicd/helm-charts/fetch-prod-helm-chart
+                  echo "****** Stage 3 completed ******"
+                '''
+              }
+            }
+          }
+        }
+      }
+    }
+
+    stage('Pending Approval for stage 4- Prod: v1, 0 replicas, 0% traffic || Canary: v2, 2 replicas, 100% traffic') {
+      when {
+        expression {
+          env.APPROVAL == "Proceed"
+        }
+      }
+      steps {
+        script {
+          env.APPROVAL = input id: 'Stage4Action', message: 'Proceed to stage 4 or Rollback?', parameters: [choice(choices: ['Proceed', 'Rollback'], description: 'Select Proceed to go to Stage 4, Rollback to go to existing state\n', name: 'APPROVAL')]
+          if(env.APPROVAL == "Rollback") {
+            sh '''
+              echo "*******Rollback to v1 from Stage 3*******"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('4. Making 0 replicas on Production Deployment with 2 replicas and 100% traffic on Canary') {
+      when {
+        expression {
+          env.APPROVAL == "Proceed"
+        }
+      }
+      steps {
+        script {
+          container('helm') {
+            withCredentials([file(credentialsId: "kube-config-petplan-${cluster}-cluster", variable: 'KUBECONFIG')]) {
+              script {
+                sh '''
+                  lastDeployedVersion=$(cat last_successful_build_tag.txt)
+                  echo "****** Stage 4 running ******"
+                  helm upgrade  --install --namespace ${namespace} --values ./.cicd/helm-charts/fetch-prod-helm-chart/values.yaml --set productionDeployment.image=768992413438.dkr.ecr.us-east-2.amazonaws.com/fdp-wallet-service-release:$lastDeployedVersion,productionDeployment.weight=0,productionDeployment.replicaCount=0,canaryDeployment.image=768992413438.dkr.ecr.us-east-2.amazonaws.com/fdp-wallet-service-release:${ECR_image_name},canaryDeployment.replicaCount=2,canaryDeployment.weight=100 --wait fetch-prod-fdp-wallet-service ./.cicd/helm-charts/fetch-prod-helm-chart
+                  echo "****** Stage 4 completed ******"
+                '''
+              }
+            }
+          }
+        }
+      }
+    }
+
+    stage('Pending Approval for stage 5- Prod: v2, 2 replicas, 0% traffic || Canary: v2, 2 replicas, 100% traffic') {
+      when {
+        expression {
+          env.APPROVAL == "Proceed"
+        }
+      }
+      steps {
+        script {
+          env.APPROVAL = input id: 'Stage5Action', message: 'Proceed to stage 5 or Rollback?', parameters: [choice(choices: ['Proceed', 'Rollback'], description: 'Select Proceed to go to Stage 5, Rollback to go to existing state\n', name: 'APPROVAL')]
+          if(env.APPROVAL == "Rollback") {
+            sh '''
+              echo "*******Rollback to v1 from Stage 4*******"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('5. Prepare production deployment with new version, 0% traffic and 2 replicas') {
+      when {
+        expression {
+          env.APPROVAL == "Proceed"
+        }
+      }
+      steps {
+        script {
+          container('helm') {
+            withCredentials([file(credentialsId: "kube-config-petplan-${cluster}-cluster", variable: 'KUBECONFIG')]) {
+              script {
+                sh '''
+                  lastDeployedVersion=$(cat last_successful_build_tag.txt)
+                  echo "****** Stage 5 running ******"
+                  helm upgrade  --install --namespace ${namespace} --values ./.cicd/helm-charts/fetch-prod-helm-chart/values.yaml --set productionDeployment.image=768992413438.dkr.ecr.us-east-2.amazonaws.com/fdp-wallet-service-release:${ECR_image_name},productionDeployment.weight=0,productionDeployment.replicaCount=2,canaryDeployment.image=768992413438.dkr.ecr.us-east-2.amazonaws.com/fdp-wallet-service-release:${ECR_image_name},canaryDeployment.replicaCount=2,canaryDeployment.weight=100 --wait --timeout 600 fetch-prod-fdp-wallet-service ./.cicd/helm-charts/fetch-prod-helm-chart
+                  echo "****** Stage 5 completed ******"
+                '''
+              }
+            }
+          }
+        }
+      }
+    }
+
+    stage('Pending Approval for stage 6- Prod: v2, 2 replicas, 100% traffic || Canary: v2, 2 replicas, 0% traffic') {
+      when {
+        expression {
+          env.APPROVAL == "Proceed"
+        }
+      }
+      steps {
+        script {
+          env.APPROVAL = input id: 'Stage6Action', message: 'Proceed to stage 6 or Rollback?', parameters: [choice(choices: ['Proceed', 'Rollback'], description: 'Select Proceed to go to Stage 6, Rollback to go to existing state\n', name: 'APPROVAL')]
+          if(env.APPROVAL == "Rollback") {
+            sh '''
+              echo "*******Rollback to v1 from Stage 5*******"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('6. Production deployment of new version with 100% traffic and 2 replicas') {
+      when {
+        expression {
+          env.APPROVAL == "Proceed"
+        }
+      }
+      steps {
+        script {
+          container('helm') {
+            withCredentials([file(credentialsId: "kube-config-petplan-${cluster}-cluster", variable: 'KUBECONFIG')]) {
+              script {
+                sh '''
+                  lastDeployedVersion=$(cat last_successful_build_tag.txt)
+                  echo "****** Stage 6 running ******"
+                  helm upgrade  --install --namespace ${namespace} --values ./.cicd/helm-charts/fetch-prod-helm-chart/values.yaml --set productionDeployment.image=768992413438.dkr.ecr.us-east-2.amazonaws.com/fdp-wallet-service-release:${ECR_image_name},productionDeployment.weight=100,productionDeployment.replicaCount=2,canaryDeployment.image=768992413438.dkr.ecr.us-east-2.amazonaws.com/fdp-wallet-service-release:${ECR_image_name},canaryDeployment.replicaCount=2,canaryDeployment.weight=0 --wait fetch-prod-fdp-wallet-service ./.cicd/helm-charts/fetch-prod-helm-chart
+                  echo "****** Stage 6 completed ******"
+                '''
+              }
+            }
+          }
+        }
+      }
+    }
+
+    stage('Pending Approval for stage 7- Prod: v2, 2 replicas, 100% traffic || Canary: v2, 0 replicas, 0% traffic') {
+      when {
+        expression {
+          env.APPROVAL == "Proceed"
+        }
+      }
+      steps {
+        script {
+          env.APPROVAL = input id: 'Stage7Action', message: 'Proceed to stage 7 or Rollback?', parameters: [choice(choices: ['Proceed', 'Rollback'], description: 'Select Proceed to go to Stage 7, Rollback to go to existing state\n', name: 'APPROVAL')]
+          if(env.APPROVAL == "Rollback") {
+            sh '''
+              echo "*******Rollback to v1 from Stage 6*******"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('7. Steady state- full traffic on production deployment, 0 canary deployment replicas') {
+      when {
+        expression {
+          env.APPROVAL == "Proceed"
+        }
+      }
+      steps {
+        script {
+          container('helm') {
+            withCredentials([file(credentialsId: "kube-config-petplan-${cluster}-cluster", variable: 'KUBECONFIG')]) {
+              script {
+                sh '''
+                  lastDeployedVersion=$(cat last_successful_build_tag.txt)
+                  echo "****** Stage 7 running ******"
+                  helm upgrade  --install --namespace ${namespace} --values ./.cicd/helm-charts/fetch-prod-helm-chart/values.yaml --set productionDeployment.image=768992413438.dkr.ecr.us-east-2.amazonaws.com/fdp-wallet-service-release:${ECR_image_name},productionDeployment.weight=100,productionDeployment.replicaCount=2,canaryDeployment.image=768992413438.dkr.ecr.us-east-2.amazonaws.com/fdp-wallet-service-release:${ECR_image_name},canaryDeployment.replicaCount=0,canaryDeployment.weight=0 --wait fetch-prod-fdp-wallet-service ./.cicd/helm-charts/fetch-prod-helm-chart
+                  echo "****** Stage 7 completed ******"
+                '''
+              }
+            }
+          }
+        }
+      }
+    }
+
+    stage('Rollback') {
+      when {
+        expression {
+          env.APPROVAL == "Rollback"
+        }
+      }
+      steps {
+        script {
+          container('helm') {
+            withCredentials([file(credentialsId: "kube-config-petplan-${cluster}-cluster", variable: 'KUBECONFIG')]) {
+              script {
+                sh '''
+                  lastDeployedVersion=$(cat last_successful_build_tag.txt)
+                  echo "****** Starting Rollback ******"
+                  helm upgrade  --install --namespace ${namespace} --values ./.cicd/helm-charts/fetch-prod-helm-chart/values.yaml --set productionDeployment.image=768992413438.dkr.ecr.us-east-2.amazonaws.com/fdp-wallet-service-release:$lastDeployedVersion,productionDeployment.weight=100,productionDeployment.replicaCount=2,canaryDeployment.image=768992413438.dkr.ecr.us-east-2.amazonaws.com/fdp-wallet-service-release:$lastDeployedVersion,canaryDeployment.replicaCount=0,canaryDeployment.weight=0 --wait fetch-prod-fdp-wallet-service ./.cicd/helm-charts/fetch-prod-helm-chart
+                  echo "****** Rollback completed ******"
+                '''
+              }
+            }
+          }
+        }
+      }
+    }
+
+    stage("Update build name") {
+      steps {
+        script {
+          if(env.APPROVAL == "Proceed") {
+            currentBuild.displayName = readFile('tag.txt')
+          }
+          else if (env.APPROVAL == "Rollback") {
+            currentBuild.displayName = readFile('last_successful_build_tag.txt')
+          }
+        }
+      }
+    }
+    stage("Dashboard") {
+      steps {
+        environmentDashboard(addColumns: false, buildJob: '', buildNumber: "${currentBuild.displayName}", componentName: 'fdp-wallet-service', data: [], nameOfEnv: "fetch-prod", packageName: '') {}
+      }
+    }
+  }
+
+  post {
+    // only triggered when blue or green sign
+    success {
+      slackSend color: '#008000', message: "${env.JOB_NAME} deployment number ${env.BUILD_NUMBER} to ${cluster} cluster - Successfully Finished - (<${env.BUILD_URL}|Open>)", channel: 'fetch-prod-env-cicd'
+    }
+    // triggered when red sign
+    failure {
+      slackSend color: '#FF9FA1', message: "${env.JOB_NAME} deployment number ${env.BUILD_NUMBER} to ${cluster} cluster - Failed - (<${env.BUILD_URL}|Open>)", channel: 'fetch-prod-env-cicd'
+    }
+  }
+}
